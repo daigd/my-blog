@@ -1,10 +1,10 @@
 baseURL: https://daigd.github.io/
-languageCode: en-us
+languageCode: zh
 defaultContentLanguage: en
-title: Cupper
+title: Dai
 theme: cupper-hugo-theme
 googleAnalytics: UA-123456789-1
-disqusShortname: yourdiscussshortname
+disqusShortname: daigd
 enableGitInfo: true
 
 taxonomies:
@@ -17,11 +17,11 @@ imaging:
   quality: 99
 
 params:
-  description: An accessibility-friendly Hugo theme, ported from the [original Cupper](https://github.com/ThePacielloGroup/cupper) project.
+  description: 热爱生活,热爱学习。
   homeMetaContent: An accessibility-friendly Hugo theme, ported from the original Cupper project.
   footer: Made with [Hugo](https://gohugo.io/). Themed by [Cupper](https://github.com/zwbetz-gh/cupper-hugo-theme). Deployed to [Netlify](https://www.netlify.com/).
   # For more date formats see https://gohugo.io/functions/format/
-  dateFormat: Jan 2, 2006
+  dateFormat: 2006-01-02
   codePenUser: someUser
   katex: true
   darkThemeAsDefault: false
@@ -41,7 +41,7 @@ menu:
     - name: Home
       url: /
       weight: 1
-    - name: Blog
+    - name: Articles
       url: /post/
       weight: 2
     - name: Tags
