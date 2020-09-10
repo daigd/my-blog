@@ -1,14 +1,11 @@
 ---
 date: "2020-07-09"
-title: "Home"
+title: "About"
 ---
 
-### 有朋自远方来，不亦乐乎？
+---
 
+本博客基于`Hugo`搭建，所用主题为`hugo-theme-learn`，详情可参考以下网站：
 
-
-#### 学习笔记，生活点滴。
-
-
-
-##### 活到老，学到老……
+* [Hugo官网](https://gohugo.io/)
+* [主题Github地址](https://github.com/matcornic/hugo-theme-learn)
