@@ -2,7 +2,6 @@
 title: "Docker学习笔记整理"
 date: 2020-06-10
 summary: "Docker学习笔记整理"
-draft: true
 ---
 
 
@@ -126,7 +125,23 @@ For more examples and ideas, visit:
  https://docs.docker.com/get-started/
 ```
 
+指定用户加入Docker分组
 
+> 为了避免每次使用Docker命令都加上sudo,可以创建Docker分组，并将当前用户加入。
+
+```bash
+# 查看是否已有docker分组
+sudo cat /etc/group | grep docker
+# 如果未创建docker分组,执行下面命令创建
+sudo groupadd docker 
+# 应用用户加入docker用户组
+sudo usermod -aG docker ${USER}
+# 重启docker服务
+sudo systemctl restart docker
+# 切换账号或退出当前账号再重新登录即可
+# 执行以下命令验证当前用户加入分组是否成功
+docker version
+```
 
 #### 讲讲docker运行run命令后发生了什么？
 
