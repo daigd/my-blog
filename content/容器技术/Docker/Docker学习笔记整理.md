@@ -150,7 +150,120 @@ docker version
 ### docker常用命令
 
 1. docker镜像的常用命令有哪些
+
+   - 拉取镜像
+
+     命令：`docker pull 镜像name:镜像tag`
+
+     如果不指定镜像tag，默认拉取镜像的latest版本。
+
+     ```bash
+     # 拉取mysql:8镜像
+     dgd@bigdata-01:~/docker/dockerfile$ docker pull mysql:8
+     8: Pulling from library/mysql
+     d121f8d1c412: Pull complete 
+     f3cebc0b4691: Pull complete 
+     1862755a0b37: Pull complete 
+     489b44f3dbb4: Pull complete 
+     690874f836db: Pull complete 
+     baa8be383ffb: Pull complete 
+     55356608b4ac: Pull complete 
+     dd35ceccb6eb: Pull complete 
+     429b35712b19: Pull complete 
+     162d8291095c: Pull complete 
+     5e500ef7181b: Pull complete 
+     af7528e958b6: Pull complete 
+     Digest: sha256:e1bfe11693ed2052cb3b4e5fa356c65381129e87e38551c6cd6ec532ebe0e808
+     Status: Downloaded newer image for mysql:8
+     docker.io/library/mysql:8
+     ```
+
+   - 构建镜像
+
+     命令：`docker build -t="镜像名" -f="Dockerfile文件路径" .
+
+     > docker build 命令最后有一个点，作用是指定镜像构建上下文，比如dockerfile中的 COPY ./test.json,构建镜像时，拷贝的并不是本机目录下的test.json文件，而是docker引擎中展开的构建上下文中的文件，如果文件超出上下文范围，docker引擎是找不到那些文件中，故命令中最后的点指定构建上下文为当前路径。[详情参考](https://blog.csdn.net/xs20691718/article/details/79502019)。
+
+     构建一个带有SSH功能的centos7镜像，Dockerfile内容如下：
+
+     ```bash
+     FROM centos:7
+     MAINTAINER dgd
+     
+     RUN yum install -y openssh-server sudo
+     RUN sed -i 's/UsePAM yes/UsePAM no/g' /etc/ssh/sshd_config
+     RUN yum  install -y openssh-clients
+     
+     RUN echo "root:111111" | chpasswd
+     RUN echo "root   ALL=(ALL)       ALL" >> /etc/sudoers
+     RUN ssh-keygen -t dsa -f /etc/ssh/ssh_host_dsa_key
+     RUN ssh-keygen -t rsa -f /etc/ssh/ssh_host_rsa_key
+     
+     RUN mkdir /var/run/sshd
+     EXPOSE 22
+     CMD ["/usr/sbin/sshd", "-D"]
+     ```
+
+     ```bash
+     dgd@bigdata-01:~/docker/dockerfile$ docker build -t="centos7-ssh:1" -f="./centos7-ssh" .
+     Sending build context to Docker daemon  3.072kB
+     Step 1/12 : FROM centos:7
+      ---> 7e6257c9f8d8
+     Step 2/12 : MAINTAINER dgd
+      ---> Running in 640dd3bef11c
+     Removing intermediate container 640dd3bef11c
+      ---> 9ab1271227fa
+     Step 3/12 : RUN yum install -y openssh-server sudo
+      ---> Running in a742c980b78a
+     Loaded plugins: fastestmirror, ovl
+     Determining fastest mirrors
+     ……(后面内容省略)
+     ```
+
+     `docker build`，`-t`指定构建镜像的名称，格式为：`name:tag`，`-f`指定`dockerfile`文件路径。
+
+   - 查看镜像
+
+     - 查看所有镜像
+
+       命令：`docker images`,效果等同于`docker image ls`。
+
+     ```bash
+     dgd@bigdata-01:~/docker/dockerfile$ docker images
+     REPOSITORY          TAG                 IMAGE ID            CREATED             SIZE
+     centos7-ssh         1                   96c37a173e9c        32 minutes ago      393MB
+     centos              7                   7e6257c9f8d8        7 weeks ago         203MB
+     hello-world         latest              bf756fb1ae65        9 months ago        13.3kB
+     ```
+
+     - 查看指定镜像详情
+
+       命令：`docker image inspect 镜像ID`
+
+       ```bash
+       dgd@bigdata-01:~/docker/dockerfile$ docker image inspect 96c37a173e9c
+       ```
+
+   - 删除镜像
+
+     命令：`docker rmi 镜像ID`
+
+   ```bash
+   # 查看当前镜像记录
+   dgd@bigdata-01:~/docker/dockerfile$ docker images
+   REPOSITORY          TAG                 IMAGE ID            CREATED             SIZE
+   centos              7                   7e6257c9f8d8        7 weeks ago         203MB
+   centos              latest              0d120b6ccaa8        7 weeks ago         215MB
+   # 把TAG为latest的centos镜像删除：根据镜像ID删除镜像
+   dgd@bigdata-01:~/docker/dockerfile$ docker rmi 0d120b6ccaa8
+   Untagged: centos:latest
+   Untagged: centos@sha256:76d24f3ba3317fa945743bb3746fbaf3a0b752f10b10376960de01da70685fbd
+   Deleted: sha256:0d120b6ccaa8c5e149176798b3501d4dd1885f961922497cd0abef155c869566
+   Deleted: sha256:291f6e44771a7b4399b0c6fb40ab4fe0331ddf76eda11080f052b003d96c7726
+   ```
+
 2. docker容器的常用命令有哪些
+
 3. 谈下docker的其它常用命令，如查看日志，元数据，进程等
 
 ### 理解docker镜像
