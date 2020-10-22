@@ -1,7 +1,7 @@
 ---
-title: "Spring源码学习-容器的基本实现(2)"
+title: "Spring源码学习-解析bean标签"
 date: 2020-10-16T17:23:12+08:00
-tags: ["Spring", "源码学习","IOC","默认标签处理"]
+tags: ["Spring", "源码学习","IOC","解析bean标签"]
 draft: false
 ---
 
@@ -541,7 +541,7 @@ public void registerBeanDefinition(String beanName, BeanDefinition beanDefinitio
 	}
 ```
 
-看完上面的代码，对`Bean` 的注册其实就是放入到`map` 缓存中，同时做了一些额外操作，比如对`methodsOverrides`属性的校验，`Bean`是否允许覆盖的校验，beanName 缓存的更新等。
+看完上面的代码，对`BeanDefinition` 的注册其实就是放入到`map` 缓存中，同时做了一些额外操作，比如对`methodsOverrides`属性的校验，`Bean`是否允许覆盖的校验，beanName 缓存的更新等。
 
 接下来，我们看下别名的注册过程：
 
