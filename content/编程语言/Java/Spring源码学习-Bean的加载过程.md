@@ -9,6 +9,8 @@ draft: false
 
 ## bean的加载
 
+[源码Github地址](https://github.com/daigd/StudyDemo/tree/master/spring-source-learning)。
+
 前面我们分析了`Spring`对XML配置信息的解析、注册过程，下面我们来看下`Bean`是如何加载的，首先来看下代码入口：
 
 ```java

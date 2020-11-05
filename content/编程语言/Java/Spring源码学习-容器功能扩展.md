@@ -7,6 +7,8 @@ draft: false
 
 > Spring 版本：5.2.6.RELEASE，笔者的Spring源码学习笔记参考 郝佳 编著的《Spring源码深度解析》，推荐感兴趣的读者阅读原书。
 
+[源码Github地址](https://github.com/daigd/StudyDemo/tree/master/spring-source-learning)。
+
 ApplicationContext 和 BeanFactory 都是用于加载 Bean 的，但是前者提供了更多的扩展功能，实际应用中我们也是使用 ApplicationContext，下面我们从代码角度来看下其是如何对容器功能进行扩展的。
 
 要使用 ApplicationContext 先引入对应依赖，如下：
