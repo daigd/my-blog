@@ -1196,3 +1196,11 @@ public Object getProxy(@Nullable ClassLoader classLoader) {
 }
 ```
 
+## 总结
+
+全部代码走完之后，梳理下动态 AOP 的实现：
+
+- 如果配置文件中声明了 `<aop:aspectj-autoproxy>`,则用对应的标签解析器，注册 AOP 代理创建器的 beanDefinition（AnnotationAwareAspectJAutoProxyCreator），且该实现了 BeanPostProcessor  接口，故获取其它 bean 的时候会自动执行其代理逻辑；
+- 如果需要创建代理类，则尝试获取增强器（包含切面类的各种切面通知，因为切面通知最后也是封装成了增强器），将增强器封装在代理生成类中；
+- 按代理生成方式创建 JDK 动态代理或 Cglib 代理（默认是 JDK 动态代理）；
+- 方法被调用的时候，通过代理来执行对应方法，执行方法前会调用拦截器链执行拦截器方法（拦截器链从增强器中提取出来），AOP 的相关切面方法也在这个过程中执行。
