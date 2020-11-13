@@ -186,7 +186,532 @@ public final void init() throws ServletException {
 	// ServletBean 初始化
 	initServletBean();
 }
+private static class ServletConfigPropertyValues extends MutablePropertyValues {
+	public ServletConfigPropertyValues(ServletConfig config, Set<String> requiredProperties)
+			throws ServletException {
+		// 如果配置了必填参数,会对所需参数进行校验,参数缺失则抛出异常
+		Set<String> missingProps = (!CollectionUtils.isEmpty(requiredProperties) ?
+				new HashSet<>(requiredProperties) : null);
+
+		Enumeration<String> paramNames = config.getInitParameterNames();
+		while (paramNames.hasMoreElements()) {
+			String property = paramNames.nextElement();
+			Object value = config.getInitParameter(property);
+			addPropertyValue(new PropertyValue(property, value));
+			if (missingProps != null) {
+				missingProps.remove(property);
+			}
+		}
+		// Fail if we are still missing properties.
+		if (!CollectionUtils.isEmpty(missingProps)) {
+			throw new ServletException(
+					"Initialization from ServletConfig for servlet '" + config.getServletName() +
+					"' failed; the following required properties were missing: " +
+					StringUtils.collectionToDelimitedString(missingProps, ", "));
+		}
+	}
+}
 ```
 
+- 加载 init-param 配置的属性；
+
+  封装参数的时候，如果配置了必填参数，会对参数进行校验，参数缺失则抛出异常。
+
+- 将当前 Servlet 转换成 BeanWrapper 实例；
+
+- 注册自定义属性编辑器；
+
+- 属性注入；
+
+- ServletBean 初始化。
+
+## ServletBean 初始化
+
+initServletBean() 在 FrameworkServlet 类里进行了重写：
+
+```java
+protected final void initServletBean() throws ServletException {
+	getServletContext().log("Initializing Spring " + getClass().getSimpleName() + " '" + getServletName() + "'");
+	if (logger.isInfoEnabled()) {
+		logger.info("Initializing Servlet '" + getServletName() + "'");
+	}
+	long startTime = System.currentTimeMillis();
+
+	try {
+		// 初始化逻辑入口：创建或刷新WebApplicationContext实例，并对servlet所使用的变量进行初始化
+		this.webApplicationContext = initWebApplicationContext();
+		// 空实现,扩展预留
+		initFrameworkServlet();
+	}
+	catch (ServletException | RuntimeException ex) {
+		logger.error("Context initialization failed", ex);
+		throw ex;
+	}
+	if (logger.isDebugEnabled()) {
+		String value = this.enableLoggingRequestDetails ?
+				"shown which may lead to unsafe logging of potentially sensitive data" :
+				"masked to prevent unsafe logging of potentially sensitive data";
+		logger.debug("enableLoggingRequestDetails='" + this.enableLoggingRequestDetails +
+				"': request parameters and headers will be " + value);
+	}
+	// 日志打印 Servlet 初始化消耗时间
+	if (logger.isInfoEnabled()) {
+		logger.info("Completed initialization in " + (System.currentTimeMillis() - startTime) + " ms");
+	}
+}
+```
+
+initServletBean() 重点逻辑就是对 WebApplicationContext 接口进行实例化：
+
+```java
+protected WebApplicationContext initWebApplicationContext() {
+	WebApplicationContext rootContext =
+			WebApplicationContextUtils.getWebApplicationContext(getServletContext());
+	WebApplicationContext wac = null;
+
+	if (this.webApplicationContext != null) {
+		// A context instance was injected at construction time -> use it
+		// context实例在构造函数中被注入，则直接使用
+		wac = this.webApplicationContext;
+		if (wac instanceof ConfigurableWebApplicationContext) {
+			ConfigurableWebApplicationContext cwac = (ConfigurableWebApplicationContext) wac;
+			if (!cwac.isActive()) {
+				// The context has not yet been refreshed -> provide services such as
+				// setting the parent context, setting the application context id, etc
+				if (cwac.getParent() == null) {
+					// The context instance was injected without an explicit parent -> set
+					// the root application context (if any; may be null) as the parent
+					cwac.setParent(rootContext);
+				}
+				// 刷新上下文环境
+				configureAndRefreshWebApplicationContext(cwac);
+			}
+		}
+	}
+	if (wac == null) {
+		// No context instance was injected at construction time -> see if one
+		// has been registered in the servlet context. If one exists, it is assumed
+		// that the parent context (if any) has already been set and that the
+		// user has performed any initialization such as setting the context id
+		
+		// context 没有在构造函数中注入，尝试在当前 servlet 去获取一个
+		wac = findWebApplicationContext();
+	}
+	if (wac == null) {
+		// No context instance is defined for this servlet -> create a local one
+		// 找不到 context 实例，则直接创建一个
+		wac = createWebApplicationContext(rootContext);
+	}
+
+	if (!this.refreshEventReceived) {
+		// Either the context is not a ConfigurableApplicationContext with refresh
+		// support or the context injected at construction time had already been
+		// refreshed -> trigger initial onRefresh manually here.
+		synchronized (this.onRefreshMonitor) {
+			// 刷新 context
+			onRefresh(wac);
+		}
+	}
+
+	if (this.publishContext) {
+		// Publish the context as a servlet context attribute.
+		String attrName = getServletContextAttributeName();
+        // 设置配置属性
+		getServletContext().setAttribute(attrName, wac);
+	}
+
+	return wac;
+}
+```
+
+- 初始化 WebApplicationContext 实例；
+- 刷新 context，初始化各种资源处理器；
+- 将当前 Servlet 及其属性设置到 ServletContext 中。
+
+重点对 createWebApplicationContext(rootContext) 方法进行分析：
+
+```java
+protected WebApplicationContext createWebApplicationContext(@Nullable WebApplicationContext parent) {
+	return createWebApplicationContext((ApplicationContext) parent);
+}
+protected WebApplicationContext createWebApplicationContext(@Nullable ApplicationContext parent) {
+	Class<?> contextClass = getContextClass();
+	if (!ConfigurableWebApplicationContext.class.isAssignableFrom(contextClass)) {
+		throw new ApplicationContextException(
+				"Fatal initialization error in servlet with name '" + getServletName() +
+				"': custom WebApplicationContext class [" + contextClass.getName() +
+				"] is not of type ConfigurableWebApplicationContext");
+	}
+	// 利用反射创建 context 实例，对象类型为 ConfigurableWebApplicationContext
+	ConfigurableWebApplicationContext wac =
+			(ConfigurableWebApplicationContext) BeanUtils.instantiateClass(contextClass);
+
+	wac.setEnvironment(getEnvironment());
+	wac.setParent(parent);
+    // 设置配置文件路径
+	String configLocation = getContextConfigLocation();
+	if (configLocation != null) {
+		wac.setConfigLocation(configLocation);
+	}
+	// 初始化Spring环境包括加载配置文件等
+	configureAndRefreshWebApplicationContext(wac);
+	return wac;
+}
+
+protected void configureAndRefreshWebApplicationContext(ConfigurableWebApplicationContext wac) {
+	if (ObjectUtils.identityToString(wac).equals(wac.getId())) {
+		// The application context id is still set to its original default value
+		// -> assign a more useful id based on available information
+		// 设置 contextId
+		if (this.contextId != null) {
+			wac.setId(this.contextId);
+		}
+		else {
+			// Generate default id...
+			wac.setId(ConfigurableWebApplicationContext.APPLICATION_CONTEXT_ID_PREFIX +
+					ObjectUtils.getDisplayString(getServletContext().getContextPath()) + '/' + getServletName());
+		}
+	}
+
+	// 属性设置
+	wac.setServletContext(getServletContext());
+	wac.setServletConfig(getServletConfig());
+	wac.setNamespace(getNamespace());
+	wac.addApplicationListener(new SourceFilteringListener(wac, new ContextRefreshListener()));
+
+	// The wac environment's #initPropertySources will be called in any case when the context
+	// is refreshed; do it eagerly here to ensure servlet property sources are in place for
+	// use in any post-processing or initialization that occurs below prior to #refresh
+	ConfigurableEnvironment env = wac.getEnvironment();
+	if (env instanceof ConfigurableWebEnvironment) {
+		((ConfigurableWebEnvironment) env).initPropertySources(getServletContext(), getServletConfig());
+	}
+
+	// 扩展预留
+	postProcessWebApplicationContext(wac);
+	applyInitializers(wac);
+	// 加载Spring容器及扩展实现
+	wac.refresh();
+}
+```
+
+对 WebApplicationContext 实例的过程最终会调用 AbstractApplicationContext.refresh() 方法，该部分内容可参看 [Spring 容器功能扩展](https://vigorous-wozniak-4b6bd2.netlify.app/%E7%BC%96%E7%A8%8B%E8%AF%AD%E8%A8%80/java/spring%E6%BA%90%E7%A0%81%E5%AD%A6%E4%B9%A0-%E5%AE%B9%E5%99%A8%E5%8A%9F%E8%83%BD%E6%89%A9%E5%B1%95/)，至此 Spring 容器已创建完毕，下面刷新 context，初始化 Web 场景下用到的一些处理器，实现代码在 DispatcherServlet.onRefresh(ApplicationContext context) 中：
+
+```java
+protected void onRefresh(ApplicationContext context) {
+	initStrategies(context);
+}
+protected void initStrategies(ApplicationContext context) {
+	// 初始化 MultipartResolver（主要用来处理文件上传）,beanName 为 multipartResolver
+	initMultipartResolver(context);
+	// 初始化 LocaleResolver（国际化配置）,beanName 为 localeResolver
+	initLocaleResolver(context);
+	// 初始化 ThemeResolver（涉及到网页主题的切换）,beanName 为 themeResolver
+	initThemeResolver(context);
+	// 初始化 HandlerMapping （负责请求的转发）
+	initHandlerMappings(context);
+	// 初始化 HandlerAdapter
+	initHandlerAdapters(context);
+	// 初始化 HandlerExceptionResolver
+	initHandlerExceptionResolvers(context);
+	// 初始化 RequestToViewNameTranslator
+	initRequestToViewNameTranslator(context);
+	// 初始化 ViewResolver
+	initViewResolvers(context);
+	// 初始化 FlashMapManager
+	initFlashMapManager(context);
+}
+```
+
+由于这个时候 Spring 已经创建完毕，所以各种处理器的初始化流程都是类似的：如果 Spring 容器有对应 Bean，则直接指向对应 Bean，如果没有，根据 DispatcherServlet.properties 配置的默认值来创建对应 Bean，如果配置文件也没有配置默认值，则将处理器设为 null。下面以 MultipartResolver 和 LocaleResolver 的初始化过程来展开分析，其它代码思路都是类似的，不再展开。
+
+initMultipartResolver(context) 实现逻辑：
+
+```java
+private void initMultipartResolver(ApplicationContext context) {
+	try {
+		
+		// MultipartResolver beanName 固定为 multipartResolver,
+		this.multipartResolver = context.getBean(MULTIPART_RESOLVER_BEAN_NAME, MultipartResolver.class);
+		if (logger.isTraceEnabled()) {
+			logger.trace("Detected " + this.multipartResolver);
+		}
+		else if (logger.isDebugEnabled()) {
+			logger.debug("Detected " + this.multipartResolver.getClass().getSimpleName());
+		}
+	}
+	catch (NoSuchBeanDefinitionException ex) {
+		// Default is no multipart resolver.
+		// 找不到对应 Bean 则设置为 null
+		this.multipartResolver = null;
+		if (logger.isTraceEnabled()) {
+			logger.trace("No MultipartResolver '" + MULTIPART_RESOLVER_BEAN_NAME + "' declared");
+		}
+	}
+}
+```
+
+initLocaleResolver(context) 实现逻辑：
+
+```java
+private void initLocaleResolver(ApplicationContext context) {
+	try {
+		// 从 Spring 容器中获取,beanName 为 localeResolver
+		this.localeResolver = context.getBean(LOCALE_RESOLVER_BEAN_NAME, LocaleResolver.class);
+		if (logger.isTraceEnabled()) {
+			logger.trace("Detected " + this.localeResolver);
+		}
+		else if (logger.isDebugEnabled()) {
+			logger.debug("Detected " + this.localeResolver.getClass().getSimpleName());
+		}
+	}
+	catch (NoSuchBeanDefinitionException ex) {
+		// We need to use the default.
+		// 如果用户没有定义,则使用默认的 LocaleResolver 实现
+		this.localeResolver = getDefaultStrategy(context, LocaleResolver.class);
+		if (logger.isTraceEnabled()) {
+			logger.trace("No LocaleResolver '" + LOCALE_RESOLVER_BEAN_NAME +
+					"': using default [" + this.localeResolver.getClass().getSimpleName() + "]");
+		}
+	}
+}
+```
+
+加载默认实现：
+
+```java
+protected <T> T getDefaultStrategy(ApplicationContext context, Class<T> strategyInterface) {
+	List<T> strategies = getDefaultStrategies(context, strategyInterface);
+	if (strategies.size() != 1) {
+		throw new BeanInitializationException(
+				"DispatcherServlet needs exactly 1 strategy for interface [" + strategyInterface.getName() + "]");
+	}
+	return strategies.get(0);
+}
+protected <T> List<T> getDefaultStrategies(ApplicationContext context, Class<T> strategyInterface) {
+	String key = strategyInterface.getName();
+	// 默认配置从 DispatcherServlet.properties 中加载
+	String value = defaultStrategies.getProperty(key);
+	if (value != null) {
+		String[] classNames = StringUtils.commaDelimitedListToStringArray(value);
+		List<T> strategies = new ArrayList<>(classNames.length);
+		for (String className : classNames) {
+			try {
+                // 获取 Class 对象
+				Class<?> clazz = ClassUtils.forName(className, DispatcherServlet.class.getClassLoader());
+				// 根据 Class 创建对应 BeanDefinition
+                Object strategy = createDefaultStrategy(context, clazz);
+				strategies.add((T) strategy);
+			}
+			catch (ClassNotFoundException ex) {
+				throw new BeanInitializationException(
+						"Could not find DispatcherServlet's default strategy class [" + className +
+						"] for interface [" + key + "]", ex);
+			}
+			catch (LinkageError err) {
+				throw new BeanInitializationException(
+						"Unresolvable class definition for DispatcherServlet's default strategy class [" +
+						className + "] for interface [" + key + "]", err);
+			}
+		}
+		return strategies;
+	}
+	else {
+		return new LinkedList<>();
+	}
+}
+```
+
+createDefaultStrategy(context, clazz) 实现如下：
+
+```java
+protected Object createDefaultStrategy(ApplicationContext context, Class<?> clazz) {
+	return context.getAutowireCapableBeanFactory().createBean(clazz);
+}
+// 创建 BeanDefinition
+public <T> T createBean(Class<T> beanClass) throws BeansException {
+	// Use prototype bean definition, to avoid registering bean as dependent bean.
+	RootBeanDefinition bd = new RootBeanDefinition(beanClass);
+	bd.setScope(SCOPE_PROTOTYPE);
+	bd.allowCaching = ClassUtils.isCacheSafe(beanClass, getBeanClassLoader());
+	return (T) createBean(beanClass.getName(), bd, null);
+}
+```
+
+察看 DispatcherServlet.properties 内容，可知 LocaleResolver，ThemeResolver，HandlerMapping，HandlerAdapter，HandlerExceptionResolver，RequestToViewNameTranslator，ViewResolver 和 FlashMapManager 都提供了默认实现：
+
+```properties
+# Default implementation classes for DispatcherServlet's strategy interfaces.
+# Used as fallback when no matching beans are found in the DispatcherServlet context.
+# Not meant to be customized by application developers.
+
+org.springframework.web.servlet.LocaleResolver=org.springframework.web.servlet.i18n.AcceptHeaderLocaleResolver
+
+org.springframework.web.servlet.ThemeResolver=org.springframework.web.servlet.theme.FixedThemeResolver
+
+org.springframework.web.servlet.HandlerMapping=org.springframework.web.servlet.handler.BeanNameUrlHandlerMapping,\
+	org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping,\
+	org.springframework.web.servlet.function.support.RouterFunctionMapping
+
+org.springframework.web.servlet.HandlerAdapter=org.springframework.web.servlet.mvc.HttpRequestHandlerAdapter,\
+	org.springframework.web.servlet.mvc.SimpleControllerHandlerAdapter,\
+	org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerAdapter,\
+	org.springframework.web.servlet.function.support.HandlerFunctionAdapter
 
 
+org.springframework.web.servlet.HandlerExceptionResolver=org.springframework.web.servlet.mvc.method.annotation.ExceptionHandlerExceptionResolver,\
+	org.springframework.web.servlet.mvc.annotation.ResponseStatusExceptionResolver,\
+	org.springframework.web.servlet.mvc.support.DefaultHandlerExceptionResolver
+
+org.springframework.web.servlet.RequestToViewNameTranslator=org.springframework.web.servlet.view.DefaultRequestToViewNameTranslator
+
+org.springframework.web.servlet.ViewResolver=org.springframework.web.servlet.view.InternalResourceViewResolver
+
+org.springframework.web.servlet.FlashMapManager=org.springframework.web.servlet.support.SessionFlashMapManager
+```
+
+## DispatcherServlet 逻辑处理
+
+Servlet 接口的 service(ServletRequest req, ServletResponse res) 方法 实现在 HttpServlet中，如下：
+
+```java
+public void service(ServletRequest req, ServletResponse res)
+    throws ServletException, IOException
+{
+    HttpServletRequest  request;
+    HttpServletResponse response;
+    
+    if (!(req instanceof HttpServletRequest &&
+            res instanceof HttpServletResponse)) {
+        throw new ServletException("non-HTTP request or response");
+    }
+
+    request = (HttpServletRequest) req;
+    response = (HttpServletResponse) res;
+	// 参数转化后，请求交由 service(HttpServletRequest req, HttpServletResponse resp) 方法处理
+    service(request, response);
+}
+protected void service(HttpServletRequest req, HttpServletResponse resp)
+    throws ServletException, IOException
+{
+    String method = req.getMethod();
+
+    if (method.equals(METHOD_GET)) {
+        long lastModified = getLastModified(req);
+        if (lastModified == -1) {
+            // servlet doesn't support if-modified-since, no reason
+            // to go through further expensive logic
+            doGet(req, resp);
+        } else {
+            long ifModifiedSince = req.getDateHeader(HEADER_IFMODSINCE);
+            if (ifModifiedSince < lastModified) {
+                // If the servlet mod time is later, call doGet()
+                // Round down to the nearest second for a proper compare
+                // A ifModifiedSince of -1 will always be less
+                maybeSetLastModified(resp, lastModified);
+                doGet(req, resp);
+            } else {
+                resp.setStatus(HttpServletResponse.SC_NOT_MODIFIED);
+            }
+        }
+
+    } else if (method.equals(METHOD_HEAD)) {
+        long lastModified = getLastModified(req);
+        maybeSetLastModified(resp, lastModified);
+        doHead(req, resp);
+
+    } else if (method.equals(METHOD_POST)) {
+        doPost(req, resp);
+        
+    } else if (method.equals(METHOD_PUT)) {
+        doPut(req, resp);
+        
+    } else if (method.equals(METHOD_DELETE)) {
+        doDelete(req, resp);
+        
+    } else if (method.equals(METHOD_OPTIONS)) {
+        doOptions(req,resp);
+        
+    } else if (method.equals(METHOD_TRACE)) {
+        doTrace(req,resp);
+        
+    } else {
+        //
+        // Note that this means NO servlet supports whatever
+        // method was requested, anywhere on this server.
+        //
+        String errMsg = lStrings.getString("http.method_not_implemented");
+        Object[] errArgs = new Object[1];
+        errArgs[0] = method;
+        errMsg = MessageFormat.format(errMsg, errArgs);
+        
+        resp.sendError(HttpServletResponse.SC_NOT_IMPLEMENTED, errMsg);
+    }
+}
+```
+
+可以看到，在HttpServlet.service(req,resp) 方法，根据方法名不同，分别交由对应的请求方法来处理，这里就针对 doGet(req, resp) 和 doPost(req,resp) 来展开分析。
+
+doGet(req, resp)  和 doPost(req,resp) 方法实现逻辑在 FrameworkServlet 类中，实现如下：
+
+```java
+// final 禁止子类重写
+protected final void doGet(HttpServletRequest request, HttpServletResponse response)
+		throws ServletException, IOException {
+	processRequest(request, response);
+}
+protected final void doPost(HttpServletRequest request, HttpServletResponse response)
+		throws ServletException, IOException {
+	processRequest(request, response);
+}
+```
+
+可以看到，Get 请求 和Post 请求最后都是委托给 processRequest(request, response) 方法来处理：
+
+```java
+protected final void processRequest(HttpServletRequest request, HttpServletResponse response)
+		throws ServletException, IOException {
+	// 记录当前时间,用于计算当前web请求的处理时间
+	long startTime = System.currentTimeMillis();
+	Throwable failureCause = null;
+
+	// 提取出当前线程的 LocaleContext、RequestAttributes 变量
+	LocaleContext previousLocaleContext = LocaleContextHolder.getLocaleContext();
+	LocaleContext localeContext = buildLocaleContext(request);
+
+	RequestAttributes previousAttributes = RequestContextHolder.getRequestAttributes();
+	ServletRequestAttributes requestAttributes = buildRequestAttributes(request, response, previousAttributes);
+
+	// 为当前请求创建 WebAsyncManager 实例，负责管理异步请求
+	WebAsyncManager asyncManager = WebAsyncUtils.getAsyncManager(request);
+	asyncManager.registerCallableInterceptor(FrameworkServlet.class.getName(), new RequestBindingInterceptor());
+
+	// 为当前请求初始化 LocaleContext、RequestAttributes 变量
+	initContextHolders(request, localeContext, requestAttributes);
+
+	try {
+		// 请求处理逻辑 
+		doService(request, response);
+	}
+	catch (ServletException | IOException ex) {
+		failureCause = ex;
+		throw ex;
+	}
+	catch (Throwable ex) {
+		failureCause = ex;
+		throw new NestedServletException("Request processing failed", ex);
+	}
+
+	finally {
+		// 恢复 LocaleContext、RequestAttributes 变量
+		resetContextHolders(request, previousLocaleContext, previousAttributes);
+		if (requestAttributes != null) {
+			requestAttributes.requestCompleted();
+		}
+		// 日志处理
+		logResult(request, response, failureCause, asyncManager);
+		// 发布事件通知
+		publishRequestHandledEvent(request, response, startTime, failureCause);
+	}
+}
+```

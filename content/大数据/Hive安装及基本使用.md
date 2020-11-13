@@ -138,7 +138,7 @@ mv apache-hive-2.3.7-bin/ hive
 
 ## Hive 基本使用
 
-首先执行 hive 进行命令行窗口。
+首先执行 hive 进入命令行窗口。
 
 - 创建数据库
 
