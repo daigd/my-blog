@@ -715,3 +715,377 @@ protected final void processRequest(HttpServletRequest request, HttpServletRespo
 	}
 }
 ```
+
+doService(request, response) 方法的实现在 DispatcherServlet 类中：
+
+```java
+protected void doService(HttpServletRequest request, HttpServletResponse response) throws Exception {
+	// 日志处理
+	logRequest(request);
+
+	// Keep a snapshot of the request attributes in case of an include,
+	// to be able to restore the original attributes after the include.
+	Map<String, Object> attributesSnapshot = null;
+	// 判断请求中是否包含属性：javax.servlet.include.request_uri,包含则缓存属性快照
+	if (WebUtils.isIncludeRequest(request)) {
+		attributesSnapshot = new HashMap<>();
+		Enumeration<?> attrNames = request.getAttributeNames();
+		while (attrNames.hasMoreElements()) {
+			String attrName = (String) attrNames.nextElement();
+			if (this.cleanupAfterInclude || attrName.startsWith(DEFAULT_STRATEGIES_PREFIX)) {
+				attributesSnapshot.put(attrName, request.getAttribute(attrName));
+			}
+		}
+	}
+
+	// Make framework objects available to handlers and view objects.
+	// 将辅助变量(webApplicationContext，localeResolver,themeResolver,themeSource)设置成 request 变量，
+	// 方便后续过程使用
+	request.setAttribute(WEB_APPLICATION_CONTEXT_ATTRIBUTE, getWebApplicationContext());
+	request.setAttribute(LOCALE_RESOLVER_ATTRIBUTE, this.localeResolver);
+	request.setAttribute(THEME_RESOLVER_ATTRIBUTE, this.themeResolver);
+	request.setAttribute(THEME_SOURCE_ATTRIBUTE, getThemeSource());
+
+	if (this.flashMapManager != null) {
+		FlashMap inputFlashMap = this.flashMapManager.retrieveAndUpdate(request, response);
+		if (inputFlashMap != null) {
+			request.setAttribute(INPUT_FLASH_MAP_ATTRIBUTE, Collections.unmodifiableMap(inputFlashMap));
+		}
+		request.setAttribute(OUTPUT_FLASH_MAP_ATTRIBUTE, new FlashMap());
+		request.setAttribute(FLASH_MAP_MANAGER_ATTRIBUTE, this.flashMapManager);
+	}
+
+	try {
+		// 请求分发处理
+		doDispatch(request, response);
+	}
+	finally {
+		if (!WebAsyncUtils.getAsyncManager(request).isConcurrentHandlingStarted()) {
+			// Restore the original attribute snapshot, in case of an include.
+			// 恢复原始属性快照
+			if (attributesSnapshot != null) {
+				restoreAttributesAfterInclude(request, attributesSnapshot);
+			}
+		}
+	}
+}
+```
+
+请求分发处理实现：
+
+```java
+protected void doDispatch(HttpServletRequest request, HttpServletResponse response) throws Exception {
+	HttpServletRequest processedRequest = request;
+	HandlerExecutionChain mappedHandler = null;
+	boolean multipartRequestParsed = false;
+    // 获取异步管理器
+	WebAsyncManager asyncManager = WebAsyncUtils.getAsyncManager(request);
+
+	try {
+		ModelAndView mv = null;
+		Exception dispatchException = null;
+
+		try {
+			// contentType 为 multipart 类型,将 request 转化为 MultipartHttpServletRequest 类型
+			processedRequest = checkMultipart(request);
+			multipartRequestParsed = (processedRequest != request);
+
+			// Determine handler for the current request.
+			// 寻找对应的 handler 来处理请求
+			mappedHandler = getHandler(processedRequest);
+			if (mappedHandler == null) {
+				// 没找到处理请求的 handler，则通过 response 反馈错误信息
+				noHandlerFound(processedRequest, response);
+				return;
+			}
+
+			// Determine handler adapter for the current request.
+			// 根据当前的 handler 来确定对应的 handlerAdapter
+			HandlerAdapter ha = getHandlerAdapter(mappedHandler.getHandler());
+
+			// Process last-modified header, if supported by the handler.
+			String method = request.getMethod();
+			boolean isGet = "GET".equals(method);
+			if (isGet || "HEAD".equals(method)) {
+				long lastModified = ha.getLastModified(request, mappedHandler.getHandler());
+				// 当前 handler 支持 last-modified 头处理
+				if (new ServletWebRequest(request, response).checkNotModified(lastModified) && isGet) {
+					return;
+				}
+			}
+
+			// handler 拦截器 preHandle 方法调用
+			if (!mappedHandler.applyPreHandle(processedRequest, response)) {
+				return;
+			}
+
+			// Actually invoke the handler.
+			// 处理请求,并返回视图
+			mv = ha.handle(processedRequest, response, mappedHandler.getHandler());
+
+			if (asyncManager.isConcurrentHandlingStarted()) {
+				return;
+			}
+			applyDefaultViewName(processedRequest, mv);
+			// handler 拦截器 postHandle 方法调用
+			mappedHandler.applyPostHandle(processedRequest, response, mv);
+		}
+		catch (Exception ex) {
+			dispatchException = ex;
+		}
+		catch (Throwable err) {
+			// As of 4.3, we're processing Errors thrown from handler methods as well,
+			// making them available for @ExceptionHandler methods and other scenarios.
+			dispatchException = new NestedServletException("Handler dispatch failed", err);
+		}
+		// 处理请求结果
+		processDispatchResult(processedRequest, response, mappedHandler, mv, dispatchException);
+	}
+	catch (Exception ex) {
+		// 请求处理完成之后触发
+		triggerAfterCompletion(processedRequest, response, mappedHandler, ex);
+	}
+	catch (Throwable err) {
+		triggerAfterCompletion(processedRequest, response, mappedHandler,
+				new NestedServletException("Handler processing failed", err));
+	}
+	finally {
+		if (asyncManager.isConcurrentHandlingStarted()) {
+			// Instead of postHandle and afterCompletion
+			if (mappedHandler != null) {
+				mappedHandler.applyAfterConcurrentHandlingStarted(processedRequest, response);
+			}
+		}
+		else {
+			// Clean up any resources used by a multipart request.
+			if (multipartRequestParsed) {
+				// 针对 MultipartHttpServletRequest 请求做资源释放
+				cleanupMultipart(processedRequest);
+			}
+		}
+	}
+}
+```
+
+### 获取异步管理器
+
+WebAsyncUtils.getAsyncManager(request) 实现逻辑：
+
+```java
+public static WebAsyncManager getAsyncManager(ServletRequest servletRequest) {
+	WebAsyncManager asyncManager = null;
+	// 尝试从 request 属性中获取,如果没有再创建一个
+	Object asyncManagerAttr = servletRequest.getAttribute(WEB_ASYNC_MANAGER_ATTRIBUTE);
+	if (asyncManagerAttr instanceof WebAsyncManager) {
+		asyncManager = (WebAsyncManager) asyncManagerAttr;
+	}
+	if (asyncManager == null) {
+		asyncManager = new WebAsyncManager();
+		servletRequest.setAttribute(WEB_ASYNC_MANAGER_ATTRIBUTE, asyncManager);
+	}
+	return asyncManager;
+}
+```
+
+### multipart 请求处理
+
+checkMultipart(request) 实现逻辑：
+
+```java
+protected HttpServletRequest checkMultipart(HttpServletRequest request) throws MultipartException {
+	if (this.multipartResolver != null && this.multipartResolver.isMultipart(request)) {
+		if (WebUtils.getNativeRequest(request, MultipartHttpServletRequest.class) != null) {
+			if (request.getDispatcherType().equals(DispatcherType.REQUEST)) {
+				logger.trace("Request already resolved to MultipartHttpServletRequest, e.g. by MultipartFilter");
+			}
+		}
+		else if (hasMultipartException(request)) {
+			logger.debug("Multipart resolution previously failed for current request - " +
+					"skipping re-resolution for undisturbed error rendering");
+		}
+		else {
+			try {
+				// 将 request 转化为 MultipartHttpServletRequest 类型
+				return this.multipartResolver.resolveMultipart(request);
+			}
+			catch (MultipartException ex) {
+				if (request.getAttribute(WebUtils.ERROR_EXCEPTION_ATTRIBUTE) != null) {
+					logger.debug("Multipart resolution failed for error dispatch", ex);
+					// Keep processing error dispatch with regular request handle below
+				}
+				else {
+					throw ex;
+				}
+			}
+		}
+	}
+	// If not returned before: return original request.
+	return request;
+}
+```
+
+### 根据 request 信息获取对应的 handler
+
+getHandler(processedRequest) 实现逻辑：
+
+```java
+protected HandlerExecutionChain getHandler(HttpServletRequest request) throws Exception {
+	if (this.handlerMappings != null) {
+		for (HandlerMapping mapping : this.handlerMappings) {
+			HandlerExecutionChain handler = mapping.getHandler(request);
+			if (handler != null) {
+				return handler;
+			}
+		}
+	}
+	return null;
+}
+```
+
+HandlerMapping.getHandler(request) 的实现在 AbstractHandlerMapping 类中，
+
+```java
+public final HandlerExecutionChain getHandler(HttpServletRequest request) throws Exception {
+	// 根据请求获取对应的 handler
+	Object handler = getHandlerInternal(request);
+	if (handler == null) {
+		// 找不到 handler,使用默认的 handler
+		handler = getDefaultHandler();
+	}
+	// handler 为空,直接返回
+	if (handler == null) {
+		return null;
+	}
+	// Bean name or resolved handler?
+	if (handler instanceof String) {
+		// 如果 handler 为字符串，尝试从 Spring 容器获取对应 bean
+		String handlerName = (String) handler;
+		handler = obtainApplicationContext().getBean(handlerName);
+	}
+	// 实际执行逻辑
+	HandlerExecutionChain executionChain = getHandlerExecutionChain(handler, request);
+
+	if (logger.isTraceEnabled()) {
+		logger.trace("Mapped to " + handler);
+	}
+	else if (logger.isDebugEnabled() && !request.getDispatcherType().equals(DispatcherType.ASYNC)) {
+		logger.debug("Mapped to " + executionChain.getHandler());
+	}
+	// 针对跨域请求处理
+	if (hasCorsConfigurationSource(handler) || CorsUtils.isPreFlightRequest(request)) {
+		CorsConfiguration config = (this.corsConfigurationSource != null ? this.corsConfigurationSource.getCorsConfiguration(request) : null);
+		CorsConfiguration handlerConfig = getCorsConfiguration(handler, request);
+		config = (config != null ? config.combine(handlerConfig) : handlerConfig);
+		executionChain = getCorsHandlerExecutionChain(request, executionChain, config);
+	}
+	return executionChain;
+}
+```
+
+### 没找到 handler 的异常处理
+
+noHandlerFound(processedRequest, response) 实现逻辑：
+
+```java
+protected void noHandlerFound(HttpServletRequest request, HttpServletResponse response) throws Exception {
+	if (pageNotFoundLogger.isWarnEnabled()) {
+		pageNotFoundLogger.warn("No mapping for " + request.getMethod() + " " + getRequestUri(request));
+	}
+	if (this.throwExceptionIfNoHandlerFound) {
+		throw new NoHandlerFoundException(request.getMethod(), getRequestUri(request),
+				new ServletServerHttpRequest(request).getHeaders());
+	}
+	else {
+		// 设置 response 响应码为404 
+		response.sendError(HttpServletResponse.SC_NOT_FOUND);
+	}
+}
+```
+
+### 根据 handler 获取对应的 handlerAdapter
+
+getHandlerAdapter(mappedHandler.getHandler()) 代码如下：
+
+```java
+protected HandlerAdapter getHandlerAdapter(Object handler) throws ServletException {
+	if (this.handlerAdapters != null) {
+		for (HandlerAdapter adapter : this.handlerAdapters) {
+			if (adapter.supports(handler)) {
+				return adapter;
+			}
+		}
+	}
+	throw new ServletException("No adapter for handler [" + handler +
+			"]: The DispatcherServlet configuration needs to include a HandlerAdapter that supports this handler");
+}
+```
+
+### last-modified 缓存处理
+
+如果是 Get 或 Head 协议请求，且服务器在指定时间内容没有修改过，响应状态码返回 304，只有响应头，内容为空，这样就节省了网络带宽。
+
+### handler 拦截器 preHandle 方法调用
+
+### 处理请求并返回视图
+
+代码入口 ha.handle(processedRequest, response, mappedHandler.getHandler())，实现逻辑在 AbstractHandlerMethodAdapter中：
+
+```java
+public final ModelAndView handle(HttpServletRequest request, HttpServletResponse response, Object handler)
+		throws Exception {
+	return handleInternal(request, response, (HandlerMethod) handler);
+}
+```
+
+handleInternal(request, response, (HandlerMethod) handler) 实现在 RequestMappingHandlerAdapter 类中：
+
+```java
+protected ModelAndView handleInternal(HttpServletRequest request,
+		HttpServletResponse response, HandlerMethod handlerMethod) throws Exception {
+
+	ModelAndView mav;
+	// 检查该请求是否支持处理及是否需要会话
+	checkRequest(request);
+
+	// Execute invokeHandlerMethod in synchronized block if required.
+	// 执行同步请求
+	if (this.synchronizeOnSession) {
+		HttpSession session = request.getSession(false);
+		if (session != null) {
+			Object mutex = WebUtils.getSessionMutex(session);
+			synchronized (mutex) {
+				mav = invokeHandlerMethod(request, response, handlerMethod);
+			}
+		}
+		else {
+			// No HttpSession available -> no mutex necessary
+			mav = invokeHandlerMethod(request, response, handlerMethod);
+		}
+	}
+	else {
+		// No synchronization on session demanded at all...
+		// GET 请求会直接进来这里
+		mav = invokeHandlerMethod(request, response, handlerMethod);
+	}
+
+	if (!response.containsHeader(HEADER_CACHE_CONTROL)) {
+		if (getSessionAttributesHandler(handlerMethod).hasSessionAttributes()) {
+			applyCacheSeconds(response, this.cacheSecondsForSessionAttributeHandlers);
+		}
+		else {
+			prepareResponse(response);
+		}
+	}
+
+	return mav;
+}
+```
+
+重点关注 invokeHandlerMethod(request, response, handlerMethod) 方法：
+
+```java
+
+```
+
+
+
