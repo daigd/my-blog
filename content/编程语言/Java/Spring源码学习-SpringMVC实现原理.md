@@ -1084,7 +1084,117 @@ protected ModelAndView handleInternal(HttpServletRequest request,
 重点关注 invokeHandlerMethod(request, response, handlerMethod) 方法：
 
 ```java
+protected ModelAndView invokeHandlerMethod(HttpServletRequest request,
+		HttpServletResponse response, HandlerMethod handlerMethod) throws Exception {
+	// 构建 ServletWebRequest 实例
+	ServletWebRequest webRequest = new ServletWebRequest(request, response);
+	try {
+		// 如果当前请求方法声明了 @InitBinder 注解,则缓存起来
+		WebDataBinderFactory binderFactory = getDataBinderFactory(handlerMethod);
+		// 获取模型工厂
+		ModelFactory modelFactory = getModelFactory(handlerMethod, binderFactory);
 
+		ServletInvocableHandlerMethod invocableMethod = createInvocableHandlerMethod(handlerMethod);
+		if (this.argumentResolvers != null) {
+			invocableMethod.setHandlerMethodArgumentResolvers(this.argumentResolvers);
+		}
+		if (this.returnValueHandlers != null) {
+			invocableMethod.setHandlerMethodReturnValueHandlers(this.returnValueHandlers);
+		}
+		invocableMethod.setDataBinderFactory(binderFactory);
+		invocableMethod.setParameterNameDiscoverer(this.parameterNameDiscoverer);
+
+		// 模型视图容器
+		ModelAndViewContainer mavContainer = new ModelAndViewContainer();
+		// 添加所有属性进去
+		mavContainer.addAllAttributes(RequestContextUtils.getInputFlashMap(request));
+		// 模型初始化
+		modelFactory.initModel(webRequest, mavContainer, invocableMethod);
+		mavContainer.setIgnoreDefaultModelOnRedirect(this.ignoreDefaultModelOnRedirect);
+
+		AsyncWebRequest asyncWebRequest = WebAsyncUtils.createAsyncWebRequest(request, response);
+		asyncWebRequest.setTimeout(this.asyncRequestTimeout);
+
+		WebAsyncManager asyncManager = WebAsyncUtils.getAsyncManager(request);
+		asyncManager.setTaskExecutor(this.taskExecutor);
+		asyncManager.setAsyncWebRequest(asyncWebRequest);
+		asyncManager.registerCallableInterceptors(this.callableInterceptors);
+		asyncManager.registerDeferredResultInterceptors(this.deferredResultInterceptors);
+
+		if (asyncManager.hasConcurrentResult()) {
+			Object result = asyncManager.getConcurrentResult();
+			mavContainer = (ModelAndViewContainer) asyncManager.getConcurrentResultContext()[0];
+			asyncManager.clearConcurrentResult();
+			LogFormatUtils.traceDebug(logger, traceOn -> {
+				String formatted = LogFormatUtils.formatValue(result, !traceOn);
+				return "Resume with async result [" + formatted + "]";
+			});
+			invocableMethod = invocableMethod.wrapConcurrentResult(result);
+		}
+
+		invocableMethod.invokeAndHandle(webRequest, mavContainer);
+		if (asyncManager.isConcurrentHandlingStarted()) {
+			return null;
+		}
+
+		// 获取模型和视图
+		return getModelAndView(mavContainer, modelFactory, webRequest);
+	}
+	finally {
+		webRequest.requestCompleted();
+	}
+}
+```
+
+### 处理请求结果
+
+代码入口 processDispatchResult(processedRequest, response, mappedHandler, mv, dispatchException)：
+
+```java
+private void processDispatchResult(HttpServletRequest request, HttpServletResponse response,
+		@Nullable HandlerExecutionChain mappedHandler, @Nullable ModelAndView mv,
+		@Nullable Exception exception) throws Exception {
+
+	boolean errorView = false;
+
+	if (exception != null) {
+		// 封装异常信息
+		if (exception instanceof ModelAndViewDefiningException) {
+			logger.debug("ModelAndViewDefiningException encountered", exception);
+			mv = ((ModelAndViewDefiningException) exception).getModelAndView();
+		}
+		else {
+			Object handler = (mappedHandler != null ? mappedHandler.getHandler() : null);
+			mv = processHandlerException(request, response, handler, exception);
+			errorView = (mv != null);
+		}
+	}
+
+	// Did the handler return a view to render?
+	// 如果 handler 返回了 view,那么需要做页面的处理
+	if (mv != null && !mv.wasCleared()) {
+		// 处理页面渲染
+		render(mv, request, response);
+		if (errorView) {
+			WebUtils.clearErrorRequestAttributes(request);
+		}
+	}
+	else {
+		if (logger.isTraceEnabled()) {
+			logger.trace("No view rendering, null ModelAndView returned.");
+		}
+	}
+
+	if (WebAsyncUtils.getAsyncManager(request).isConcurrentHandlingStarted()) {
+		// Concurrent handling started during a forward
+		return;
+	}
+
+	if (mappedHandler != null) {
+		// Exception (if any) is already handled..
+		mappedHandler.triggerAfterCompletion(request, response, null);
+	}
+}
 ```
 
 
