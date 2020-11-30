@@ -143,6 +143,32 @@ sudo systemctl restart docker
 docker version
 ```
 
+设置国内镜像源
+
+创建或修改 /etc/docker/daemon.json：
+
+```bash
+sudo vi /etc/docker/daemon.json
+```
+
+输入以下内容：
+
+```bash
+{
+    "registry-mirrors": ["http://hub-mirror.c.163.com"]
+}
+```
+
+重启docker服务
+
+> 国内镜像源：
+>
+> Docker中国区官方镜像
+> https://registry.docker-cn.com
+>
+> 网易
+> http://hub-mirror.c.163.com
+
 #### 讲讲docker运行run命令后发生了什么？
 
 #### 运行docker为啥比虚拟机快

@@ -72,8 +72,14 @@ mv apache-hive-2.3.7-bin/ hive
     vi hive-site.xml  
     ```
 
+    > 用docker安装MySQL简易命令：
+  >
+    > ```bash
+    > docker run --name "mysql-01" -h "mysql-01" --network bigdata -e MYSQL_ROOT_PASSWORD=root -p 3306:3306 -d mysql:5.7
+    > ```
+    
     属性修改：
-
+    
     ```xml
       <property>
           <!--指定MySQL用户名-->
@@ -93,27 +99,27 @@ mv apache-hive-2.3.7-bin/ hive
         <value>jdbc:mysql://mysql-01:3306/hive?createDatabaseIfNotExist=true</value>
       </property>
       <property>
-          <!--指定数据库驱动-->
+        <!--指定数据库驱动-->
         <name>javax.jdo.option.ConnectionDriverName</name>
-        <value>com.mysql.jdbc.Driver</value>
+      <value>com.mysql.jdbc.Driver</value>
         <description>Driver class name for a JDBC metastore</description>
       </property>
     ```
-
+    
     属性添加：
-
+    
     ```xml
       <property>
         <name>system:java.io.tmpdir</name>
           <!--需提前创建该目录-->
         <value>/root/hive/tmp</value>
-      </property>
+    </property>
       <property>
         <name>system:user.name</name>
         <value>${user.name}</value>
       </property>
     ```
-
+    
     至此，MySQL 配置完毕。
 
 - 启动 Hive
@@ -176,8 +182,12 @@ mv apache-hive-2.3.7-bin/ hive
   echo "C01,NO101,89
   C01,NO102,87
   C01,NO103,94
-  C01,NO104,75
-  C01,NO105,80" > /root/student.txt
+  C02,NO104,91
+  C02,NO105,74
+  C02,NO106,84
+  C03,NO107,92
+  C03,NO108,75
+  C03,NO109,80" > /root/student.txt
   ```
 
   导入数据，在Hive命令行窗口执行下列命令：
