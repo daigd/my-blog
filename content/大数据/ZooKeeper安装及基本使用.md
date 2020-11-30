@@ -6,6 +6,24 @@ tags: ["大数据", "ZooKeeper安装"]
 
 ## 简要介绍
 
+ZooKeeper 配置文件 **conf/zoo.cfg** 中主要参数介绍：
+
+对于如下配置内容：
+
+```bash
+tickTime=2000
+dataDir=/var/lib/zookeeper
+clientPort=2181
+initLimit=5
+syncLimit=2
+```
+
+- tickTime：为ZooKeeper中服务器间或客户端与服务器间维持心跳的时间间隔基本单位，也就是每隔 tickTime 时间就会发送一次心跳。
+- dataDir：ZooKeeper 保存数据的目录。
+- clientPort：客户端连接 ZooKeeper 服务器的端口，默认是 2181。
+- initLimit：用来配置 ZooKeeper 接受客户端（这里客户端指的是ZooKeeper集群中连接Leader的Follower服务器）初始化连接时长能忍受多少个心跳时间间隔。
+- syncLimit：配置标识 Leader 与 Follower 之间发送消息，请求和应答时间长度，最长不能超过多少个 tickTime 的时间长度。
+
 ## 集群安装
 
 ZooKeeper 集群安装使用  docker-compose 方式([参考](https://hub.docker.com/_/zookeeper))：
@@ -27,7 +45,7 @@ ZooKeeper 集群安装使用  docker-compose 方式([参考](https://hub.docker.
         ZOO_MY_ID: 1
         ZOO_SERVERS: server.1=0.0.0.0:2888:3888;2181 server.2=zoo2:2888:3888;2181 server.3=zoo3:2888:3888;2181
       networks:
-        - hadoop
+        - bigdata
         
     zoo2:
       image: zookeeper:3.5
@@ -40,7 +58,7 @@ ZooKeeper 集群安装使用  docker-compose 方式([参考](https://hub.docker.
         ZOO_MY_ID: 2
         ZOO_SERVERS: server.1=zoo1:2888:3888;2181 server.2=0.0.0.0:2888:3888;2181 server.3=zoo3:2888:3888;2181
       networks:
-        - hadoop
+        - bigdata
         
     zoo3:
       image: zookeeper:3.5
@@ -53,14 +71,14 @@ ZooKeeper 集群安装使用  docker-compose 方式([参考](https://hub.docker.
         ZOO_MY_ID: 3
         ZOO_SERVERS: server.1=zoo1:2888:3888;2181 server.2=zoo2:2888:3888;2181 server.3=0.0.0.0:2888:3888;2181
       networks:
-        - hadoop
+        - bigdata
         
   networks:
-    hadoop:
+    bigdata:
       external: true
   ```
 
-  注意：需要提前创建名为 hadoop 的 docker 自定义网络。
+  注意：需要提前创建名为 bigdata 的 docker 自定义网络。
 
 - 执行以下命令：
 
@@ -86,7 +104,10 @@ ZooKeeper 集群安装使用  docker-compose 方式([参考](https://hub.docker.
   Mode: follower
   ```
 
+> ZooKeeper 集群节点数量为 2n+1(n代表可损坏的机器数量)，故一个最小集群要配置三个 ZooKeeper 节点。
+
 ## 基本使用
+
 - 连接到 ZooKeeper：
 
   ```bash

@@ -14,8 +14,10 @@ Compose是一个通过`yaml`文件来定义、运行、管理Docker容器的工�
 在Linux环境安装Compose:
 
 ```shell
-sudo curl -L "https://github.com/docker/compose/releases/download/1.26.0/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+sudo curl -L "https://github.com/docker/compose/releases/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
 ```
+
+> `curl` 命令 -o 参数将服务器的回应保存成文件，等同于 `wget` 命令。
 
 下载完毕后，分配执行权限：
 
