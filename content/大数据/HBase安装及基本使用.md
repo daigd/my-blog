@@ -1,209 +1,184 @@
 ---
 date: 2020-11-11
-title: "Hive安装及基本使用"
-tags: ["大数据", "Hive安装"]
+title: "HBase安装及基本使用"
+tags: ["大数据", "HBase基本使用"]
 ---
 
 ## 安装前准备
 
-Hive 只是一个方便使用 Hadoop mapreduce 功能的客户端工具，因此安装 Hive 前需要先安装好 Hadoop,基于[使用Docker构建Hadoop集群](https://vigorous-wozniak-4b6bd2.netlify.app/%E5%A4%A7%E6%95%B0%E6%8D%AE/%E4%BD%BF%E7%94%A8docker%E6%9E%84%E5%BB%BAhadoop%E9%9B%86%E7%BE%A4/),假设 Hadoop 集群已安装好。
+安装 HBase 依赖于 ZooKeeper 及 HDFS，所以需要提前将 ZooKeeper 及 Hadoop 的 DFS 服务启动起来。
 
 ## 安装过程
 
-- 进入 Hadoop 集群的 master 节点，切换到 /root 目录，下载 Hive 安装包并解压，(具体下载版本可参考[官网](https://hive.apache.org/downloads.html))：
+- 下载安装
 
-```bash
-# 进入 master 容器
-docker exec -it master /bin/bash
-# 切换目录并下载安装包
-cd /root/
-wget https://mirrors.tuna.tsinghua.edu.cn/apache/hive/hive-2.3.7/apache-hive-2.3.7-bin.tar.gz
-# 解压至指定路径
-tar -zxvf apache-hive-2.3.7-bin.tar.gz -C /usr/local/
-# 切换目录，对解压后的 hive 目录重命名
-cd /usr/local/
-mv apache-hive-2.3.7-bin/ hive 
-```
+  这里以 cdh 版本来介绍其安装过程，首先下载对应安装包(以cdh5.9.3版本为例)，[链接](http://archive.cloudera.com/cdh5/cdh/5/)，下载成功后更改权限及解压：
+
+  ```bash
+  # 设置可执行权限
+  chmod u+x hbase-1.2.0-cdh5.9.3.tar.gz
+  # 解压
+  tar -zxf hbase-1.2.0-cdh5.9.3.tar.gz -C /usr/local
+  # 目录重命名
+  mv hbase-1.2.0-cdh5.9.3/ hbase
+  ```
 
 - 修改配置文件
 
-  进入解压后的目录，找到 conf 目录，修改配置文件
-
   ```bash
-  cd hive/conf/
-  # 如果没有 hive-env.sh 文件，cp ./hive-env.sh.template hive-env.sh
-  vi hive-env.sh
-  # 设置 hadoop 安装目录
-  HADOOP_HOME=/usr/local/hadoop
+  # 进入配置文件目录
+  cd hbase/conf/
   ```
 
-- 配置环境变量
+  - 修改 hbase-env.sh 文件：
+
+    ```bash
+    vi hbase-env.sh 
+    # 设置 JAVA_HOME
+    export JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64
+    # 不使用内置的ZooKeeper服务
+    export HBASE_MANAGES_ZK=false
+    ```
+
+  - 修改 hbase-site.xml 文件：
+
+    ```bash
+    vi hbase-site.xml 
+    ```
+
+    添加如下配置,其它参数可参考[官网](https://hbase.apache.org/book.html#config.files)：
+
+    hbase.rootdir : region server 的共享目录，用来持久化 HBase，没更改默认配置的话，数据会在重启后丢失。
+
+    hbase.cluster.distributed：是否为集群模式。
+
+    hbase.zookeeper.quorum：监听 ZooKeeper 服务的主机名，多个 ZK 服务以英文逗号分隔。
+
+    ```bash
+    <configuration>
+      <property>
+        <name>hbase.rootdir</name>
+        <value>hdfs://master:9000/hbase</value>
+      </property>
+      <property>
+        <name>hbase.cluster.distributed</name>
+        <value>true</value>
+      </property>
+      <property>
+        <name>hbase.zookeeper.quorum</name>
+        <value>zoo1,zoo2,zoo3</value>
+      </property>
+    </configuration>
+    ```
+
+  - 配置 region server 节点：
+
+    ```bash
+    vi regionservers 
+    # 配置 region server 节点主机名
+    master
+    slave1
+    slave2
+    ```
+
+- 启动服务
+
+  - 将修改好的配置文件分发到 slave1和slave2 节点 /usr/local/ 中：
+
+    ```bash
+    scp -r /usr/local/hbase/ slave1:/usr/local/
+    scp -r /usr/local/hbase/ slave2:/usr/local/
+    ```
+
+  - 执行启动脚本：
+
+    ```bash
+     ./start-hbase.sh 
+    ```
+
+  - 进入 HBase shell 命令行模式：
+
+    ```bash
+    ./hbase shell
+    ```
+
+    看到输出以下内容，则证明 HBase 服务启动成功了：
+
+    ```bash
+    2020-12-04 03:33:25,104 INFO  [main] Configuration.deprecation: hadoop.native.lib is deprecated. Instead, use io.native.lib.available
+    2020-12-04 03:33:27,123 WARN  [main] util.NativeCodeLoader: Unable to load native-hadoop library for your platform... using builtin-java classes where applicable
+    HBase Shell; enter 'help<RETURN>' for list of supported commands.
+    Type "exit<RETURN>" to leave the HBase Shell
+    Version 1.2.0-cdh5.9.3, rUnknown, Tue Jun 27 16:19:14 PDT 2017
+    hbase(main):001:0> 
+    ```
+## 相关概念
+
+## 基本使用
+
+- 查看当前表
+
+  命令：list
+
+  示例：
 
   ```bash
-  vi /etc/profile
-  # 文件末追加下面内容
-  #hive
-  export HIVE_HOME=/usr/local/hive  
-  export PATH=${HIVE_HOME}/bin:$PATH
-  ```
-
-  修改完后执行 source /etc/profile 使配置内容立即生效。
-
-- 元数据存储配置
-
-  Hive 元数据存储有两种方式：derby 和 MySql。
-
-  | 存储方式   | 优点                           | 缺点                                       |
-  | ---------- | ------------------------------ | ------------------------------------------ |
-  | 内置 derby | bin/hive 启动即可使用,简单方便 | 不同路径启动都会有一套元数据版本，无法共享 |
-  | MySQL 方式 | 元数据共享，管理方便           | 依赖MySQL                                  |
-
-  生产环境上一般是使用 MySQL 方式来管理 Hive 元数据，故下面介绍使用 MySQL 来管理 Hive 元数据。
-
-  - 上传 MySQL 驱动包到 （如mysql-connector-java-5.1.49.jar）hive 安装目录的 lib 目录下
-
-    [MySQL 驱动包下载页面](https://dev.mysql.com/downloads/connector/j/5.1.html)
-
-  - 修改配置文件（假设已安装好MqSQL，并创建一个名为 hive 的数据库）
-
-    ```bash
-    cd /usr/local/hive/conf/
-    # 如果没有该配置文件,执行 cp hive-default.xml.template hive-site.xml 
-    vi hive-site.xml  
-    ```
-
-    属性修改：
-
-    ```xml
-      <property>
-          <!--指定MySQL用户名-->
-        <name>javax.jdo.option.ConnectionUserName</name>
-        <value>root</value>
-        <description>Username to use against metastore database</description>
-      </property>
-      <property>
-          <!--指定MySQL密码-->
-        <name>javax.jdo.option.ConnectionPassword</name>
-        <value>root</value>
-        <description>password to use against metastore database</description>
-      </property>
-      <property>
-          <!--指定MySQL地址：mysql-01对应MySQLIP-->
-        <name>javax.jdo.option.ConnectionURL</name>
-        <value>jdbc:mysql://mysql-01:3306/hive?createDatabaseIfNotExist=true</value>
-      </property>
-      <property>
-          <!--指定数据库驱动-->
-        <name>javax.jdo.option.ConnectionDriverName</name>
-        <value>com.mysql.jdbc.Driver</value>
-        <description>Driver class name for a JDBC metastore</description>
-      </property>
-    ```
-
-    属性添加：
-
-    ```xml
-      <property>
-        <name>system:java.io.tmpdir</name>
-          <!--需提前创建该目录-->
-        <value>/root/hive/tmp</value>
-      </property>
-      <property>
-        <name>system:user.name</name>
-        <value>${user.name}</value>
-      </property>
-    ```
-
-    至此，MySQL 配置完毕。
-
-- 启动 Hive
-
-  - 数据库初始化
-
-    ```bash
-    schematool -dbType mysql -initSchema
-    ```
-
-  - 启动 Hive 的 metastore 元数据服务
-
-    ```bash
-    hive --service metastore
-    ```
-
-  - 启动 Hive
-
-    ```bash
-    hive
-    ```
-
-## Hive 基本使用
-
-首先执行 hive 进入命令行窗口。
-
-- 创建数据库
-
-  ```bash
-  CREATE DATABASE test;
-  ```
-
-- 显示所有数据库
-
-  ```bash
-  show DATABASES;
+  hbase(main):001:0> list
+  TABLE                                                                                                                                                                                                                                           
+  0 row(s) in 0.2740 seconds
+  => []
   ```
 
 - 创建表
 
-  ```bash
-  use test;
-  CREATE TABLE student (classNo string,strNo string,score int) row format delimited fields terminated by ',';
-  ```
+  create '表名','列簇名1','列簇名2’
 
-  - row format delimited fields terminated by ',' 指定了字段的分隔符为逗号，所以导入数据的时候文本也要为逗号，否则加载后数据为 NULL。
-  - Hive 只支持单个字符的分隔符，默认的分隔符是 \001。
-
-- 显示所有的表
+  示例：
 
   ```bash
-  show TABLES;
+  hbase(main):002:0> create 'test','info','info2'
+  0 row(s) in 28.4680 seconds
+  
+  => Hbase::Table - test
   ```
 
-- 将数据导入到表中
+- 添加记录
 
-  创建一个测试文本：
+  put '表名‘,'rowKey','列簇名:列名','列对应的值'
+
+  示例：
 
   ```bash
-  echo "C01,NO101,89
-  C01,NO102,87
-  C01,NO103,94
-  C01,NO104,75
-  C01,NO105,80" > /root/student.txt
+  put 'test','001','info:age','29'
   ```
 
-  导入数据，在Hive命令行窗口执行下列命令：
+- 查询记录（HBase 只能根据 RowKey 来查找记录）
+
+  get '表名'，'rowKey'
+
+  示例：
 
   ```bash
-  load data local inpath '/root/student.txt' overwrite into table student;
+  hbase(main):005:0> get 'test','001'
+  COLUMN                                                        CELL                                                                                                                                                                          
+   info:age                                                    timestamp=1607060951036, value=29                                                                                                                                                  
+   info:name                                                   timestamp=1607060645893, value=dgd                                                                                                                                                 
+   info2:name                                                   timestamp=1607060663840, value=dgd2     
   ```
 
-  这个命令将目标文件复制到 hive 的 warehouse 目录中，这个目录由 hive-site.xml 配置文件中 hive.metastore.warehouse.dir 配置项决定，默认值为 /user/hive/warehouse。overwrite 选项将导致 Hive 事先删除 student 目录下所有的文件，并将文件内容映射到表中。
+- 删除表
 
-- 数据查询，用法跟 SQL 类似。
+  删除表前要先禁止表，命令：
 
-  基本查询：
+   disable '表名'
 
-  ```sql
-  use test;
-  select * from student;
+   drop '表名'
+
+  示例：
+
+  ```bash
+   disable 'test'
+   drop 'test'
   ```
 
-   分组查询 group by 和统计 count：
-
-  ```sql
-  use test;
-  select classNo,count(score) from student where score>80 group by classNo;
-  ```
-
-  从执行结果可以看，Hive 把查询变成了 MapReduce 作业通过 Hadoop 来执行。
-
-  （Hive 的其它使用后续再更新。）
+  
