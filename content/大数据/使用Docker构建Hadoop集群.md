@@ -192,38 +192,18 @@ mv hadoop-2.6.0-cdh5.9.3 hadoop
   #hadoop
   export HADOOP_HOME=/usr/local/hadoop
   export PATH=$PATH:$HADOOP_HOME/bin:$HADOOP_HOME/sbin
-  export HADOOP_COMMON_HOME=$HADOOP_HOME 
-  export HADOOP_HDFS_HOME=$HADOOP_HOME 
-  export HADOOP_MAPRED_HOME=$HADOOP_HOME
-  export HADOOP_YARN_HOME=$HADOOP_HOME 
-  export HADOOP_INSTALL=$HADOOP_HOME 
-  export HADOOP_COMMON_LIB_NATIVE_DIR=$HADOOP_HOME/lib/native 
-  export HADOOP_LIBEXEC_DIR=$HADOOP_HOME/libexec 
-  export JAVA_LIBRARY_PATH=$HADOOP_HOME/lib/native:$JAVA_LIBRARY_PATH
-  export HADOOP_CONF_DIR=$HADOOP_HOME/etc/hadoop
-  export HDFS_DATANODE_USER=root
-  export HDFS_DATANODE_SECURE_USER=root
-  export HDFS_SECONDARYNAMENODE_USER=root
-  export HDFS_NAMENODE_USER=root
-  export YARN_RESOURCEMANAGER_USER=root
-  export YARN_NODEMANAGER_USER=root
   ```
-
+  
   执行“source /etc/profile”，让配置的变量内容立即成生效。
-
+  
 - 修改 Hadoop 的环境变量
 
   ```bash
   vim /usr/local/hadoop/etc/hadoop/hadoop-env.sh
   # 输入以下内容
   export JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64
-  export HDFS_NAMENODE_USER=root
-  export HDFS_DATANODE_USER=root
-  export HDFS_SECONDARYNAMENODE_USER=root
-  export YARN_RESOURCEMANAGER_USER=root
-  export YARN_NODEMANAGER_USER=root   
   ```
-
+  
 - 修改  Hadoop 相关配置文件
 
   修改 core-site.xml（路径为： /usr/local/hadoop/etc/hadoop），加入以下内容。fs.default.name 为默认的master节点。hadoop.tmp.dir 为hadoop默认的文件路径。如果本机没有的话需要自己通过 mkdir 命令进行创建。（更多参数可参阅[官网](http://archive.cloudera.com/cdh5/cdh/5/hadoop-2.6.0-cdh5.9.3/hadoop-project-dist/hadoop-common/core-default.xml)）
