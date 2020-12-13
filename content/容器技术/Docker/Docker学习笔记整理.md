@@ -292,6 +292,65 @@ sudo vi /etc/docker/daemon.json
 
 3. 谈下docker的其它常用命令，如查看日志，元数据，进程等
 
+4. docker 容器动态添加端口方式（[参考](https://zhuanlan.zhihu.com/p/65938559)）
+
+   - 确定指定端口是否已被宿主机使用
+
+     ```bash
+     sudo netstat -tunpl | grep 8080
+     ```
+
+   - 获取指定容器的 IP 地址
+
+     ```bash
+     docker inspect master | grep IPAddress
+     ```
+
+     输出内容如下：
+
+     ```bash
+     "SecondaryIPAddresses": null,
+     "IPAddress": "",
+          "IPAddress": "172.18.0.5",
+     
+     ```
+
+   - 添加端口映射
+
+     ```bash
+     sudo iptables -t nat -A  DOCKER -p tcp --dport 宿主机端口 -j DNAT --to-destination 容器IP:容器端口
+     ```
+
+     如要映射的端口为 4040，容器IP为 172.18.0.5，输出以下内容即可：
+
+     ```bash
+     sudo iptables -t nat -A  DOCKER -p tcp --dport 4040 -j DNAT --to-destination 172.18.0.5:4040
+     ```
+
+   - 删除容器端口
+
+     显示行号查看容器端口的映射情况：
+
+     ```bash
+     sudo iptables -t nat -vnL DOCKER --line-number
+     ```
+
+     输出内容如下：
+
+     ```bash
+     ...省略
+     9        5   260 DNAT       tcp  --  *      *       0.0.0.0/0            0.0.0.0/0            tcp dpt:8080 to:172.18.0.5:8080
+     10       4   208 DNAT       tcp  --  *      *       0.0.0.0/0            0.0.0.0/0            tcp dpt:4040 to:172.18.0.5:4040
+     ```
+
+     如果要把刚才添加的 4040 端口映射关系删除，即删除规则10，执行以下命令：
+
+     ```bash
+     sudo iptables -t nat -D DOCKER 10
+     ```
+
+     > 关于iptables的介绍，可参考 https://www.zsythink.net/archives/1199。
+
 ### 理解docker镜像
 
 1. 什么是docker镜像
