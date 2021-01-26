@@ -236,4 +236,34 @@ Spark 自带的集群模式为 Standalone，一般用于开发调试。
   bin/spark-submit --class SparkDemo --master yarn --deploy-mode  cluster /root/spark-yarn-demo.jar /input/test.txt
   ```
 
+  ### 踩坑记录
+  
+  执行以下命令提示以下错误：
+  
+  ```bash
+  d 
+  ```
+  
+  ```bash
+  21/01/15 15:03:19 INFO SecurityManager: SecurityManager: authentication disabled; ui acls disabled; users  with view permissions: Set(hadoop); groups with view permissions: Set(); users  with modify permissions: Set(hadoop); groups with modify permissions: Set()
+  21/01/15 15:03:20 INFO Client: Submitting application application_1610628098736_0007 to ResourceManager
+  21/01/15 15:03:20 INFO Client: Deleted staging directory hdfs://hadoop101:9000/user/hadoop/.sparkStaging/application_1610628098736_0007
+  Exception in thread "main" org.apache.hadoop.yarn.exceptions.YarnException: Failed to submit application_1610628098736_0007 to YARN : Application application_1610628098736_0007 submitted by user hadoop to unknown queue: thequeue
+  	at org.apache.hadoop.yarn.client.api.impl.YarnClientImpl.submitApplication(YarnClientImpl.java:270)
+  	at org.apache.spark.deploy.yarn.Client.submitApplication(Client.scala:184)
+  	at org.apache.spark.deploy.yarn.Client.run(Client.scala:1135)
+  	at org.apache.spark.deploy.yarn.YarnClusterApplication.start(Client.scala:1530)
+  	at org.apache.spark.deploy.SparkSubmit.org$apache$spark$deploy$SparkSubmit$$runMain(SparkSubmit.scala:845)
+  	at org.apache.spark.deploy.SparkSubmit.doRunMain$1(SparkSubmit.scala:161)
+  	at org.apache.spark.deploy.SparkSubmit.submit(SparkSubmit.scala:184)
+  	at org.apache.spark.deploy.SparkSubmit.doSubmit(SparkSubmit.scala:86)
+  	at org.apache.spark.deploy.SparkSubmit$$anon$2.doSubmit(SparkSubmit.scala:920)
+  	at org.apache.spark.deploy.SparkSubmit$.main(SparkSubmit.scala:929)
+  	at org.apache.spark.deploy.SparkSubmit.main(SparkSubmit.scala)
+  21/01/15 15:03:20 INFO ShutdownHookManager: Shutdown hook called
+  
+  ```
+  
+  解决方法：
+  
   
