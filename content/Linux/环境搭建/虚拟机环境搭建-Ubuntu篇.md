@@ -1,7 +1,7 @@
 ---
 date: 2020-09-11
-title: "虚拟机环境搭建"
-tags: ["Linux", "环境搭建"]
+title: "虚拟机环境搭建-Ubuntu篇"
+tags: ["Linux", "环境搭建","Ubuntu"]
 ---
 
 ## 虚拟机安装（略）
