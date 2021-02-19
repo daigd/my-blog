@@ -4,11 +4,11 @@ title: "虚拟机环境搭建-CentOS篇"
 tags: ["Linux", "环境搭建","CentOS"]
 ---
 
-#  VMware Workstation软件安装（略）
+##  VMware Workstation软件安装（略）
 
 [VMware Workstation 15 Pro 密钥](https://www.jianshu.com/p/5dafcbab645d)。
 
-# Linux环境安装（使用CentOS7）
+## Linux环境安装（使用CentOS7）
 
 - 安装好VMWare Workstation软件后，创建新的虚拟机：
 
@@ -42,9 +42,9 @@ tags: ["Linux", "环境搭建","CentOS"]
 
 
 
-# 环境配置
+## 环境配置
 
-## 基本配置
+### 基本配置
 
 - 操作重启之后，用 root 用户登录，输入密码：
 
