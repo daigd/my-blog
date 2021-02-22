@@ -86,7 +86,7 @@ tags: ["Linux", "环境搭建","CentOS"]
 
   ![image-20210219114201190](/linux/基本配置-6.png)
 
-- 启动 `sshd` 服务（为了能使用远程连接工具）：
+- 启动 `sshd` 服务（为了能使用远程连接工具如Xshell）：
 
   ```bash
   service sshd start
